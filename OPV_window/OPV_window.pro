@@ -9,11 +9,15 @@ include($$PWD/pcl1.12.12ReleaseOpencvhalcon.pri)
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
+    interfaces.cpp \
     main.cpp \
-    mainwindow.cpp
+    mainwindow.cpp \
+    pclwidget.cpp
 
 HEADERS += \
-    mainwindow.h
+    interfaces.h \
+    mainwindow.h \
+    pclwidget.h
 
 FORMS += \
     mainwindow.ui

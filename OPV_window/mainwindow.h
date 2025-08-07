@@ -14,11 +14,9 @@
 #include <QMessageBox>
 #include <QSplitter>
 #include <QListWidget>
-#include <QVBoxLayout>  // 添加布局头文件
-#include <QPushButton>  // 添加按钮头文件
-
-// VTK相关头文件
-#include <QVTKOpenGLNativeWidget.h>
+#include <QVBoxLayout>
+#include <QPushButton>
+#include "pclwidget.h"  // 包含PCLWidget
 
 class MainWindow : public QMainWindow
 {
@@ -42,15 +40,16 @@ private:
     void createDockWidgets();
     void createCentralWidget();
 
-    // 停靠窗口对象
+    // 停靠窗口
     QDockWidget *dockElements;
     QDockWidget *dockFiles;
     QDockWidget *dockProperties;
     QDockWidget *dockActions;
-    //中央区域显示
+
+    // 中央区域
     QSplitter *centralSplitter;
-    QVTKOpenGLNativeWidget *vtkWidget;  // VTK 3D视图
-    QWidget *imageWidget;               // 图像区域（PCL显示） - 保持为 QWidget*
+    PCLWidget *pclWidget;  // 使用PCLWidget替换原来的VTK部件
+    QTextEdit *imageWidget;
 
     // 工具栏
     QToolBar *mainToolBar;
