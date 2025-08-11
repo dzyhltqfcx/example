@@ -1,6 +1,7 @@
 #include "mainwindow.h"
-#include "interfaces.h"  // 包含Interfaces头文件
-#include <QLabel>  // 添加这行
+#include "interfaces.h"
+#include <opencv2/opencv.hpp>  // 添加OpenCV头文件
+#include <QDebug>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -10,9 +11,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     createMenuBar();
     createToolBar();
-    createDockWidgets(); // 先创建Dock部件
-    createCentralWidget(); // 再创建中央部件
-    //loadLayout();
+    createDockWidgets();
+    createCentralWidget();
+    loadLayout();
 }
 
 MainWindow::~MainWindow() {}
@@ -26,11 +27,14 @@ void MainWindow::createMenuBar()
     resetLayoutAction = new QAction(tr("恢复默认布局"), this);
     saveLayoutAction = new QAction(tr("保存布局"), this);
     loadLayoutAction = new QAction(tr("加载布局"), this);
+    openImagesAction = new QAction(tr("打开图片"), this);  // 创建打开图片动作
 
     resetLayoutAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_R));
     saveLayoutAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_S));
     loadLayoutAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_O));
+    openImagesAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_I));  // 设置快捷键
 
+    fileMenu->addAction(openImagesAction);  // 添加到文件菜单
     viewMenu->addAction(saveLayoutAction);
     viewMenu->addAction(loadLayoutAction);
     viewMenu->addSeparator();
@@ -39,6 +43,7 @@ void MainWindow::createMenuBar()
     connect(resetLayoutAction, &QAction::triggered, this, &MainWindow::resetLayout);
     connect(saveLayoutAction, &QAction::triggered, this, &MainWindow::saveLayout);
     connect(loadLayoutAction, &QAction::triggered, this, &MainWindow::loadLayout);
+    connect(openImagesAction, &QAction::triggered, this, &MainWindow::openImageFiles);  // 连接信号
 }
 
 void MainWindow::createToolBar()
@@ -47,7 +52,10 @@ void MainWindow::createToolBar()
     mainToolBar->setObjectName("mainToolBar");
     addToolBar(Qt::TopToolBarArea, mainToolBar);
 
-    mainToolBar->addAction(QIcon(":/icons/open.png"), "打开");
+    // 添加打开图片按钮到工具栏
+    QAction *openAction = mainToolBar->addAction(QIcon(":/icons/open.png"), "打开图片");
+    connect(openAction, &QAction::triggered, this, &MainWindow::openImageFiles);
+
     mainToolBar->addAction(QIcon(":/icons/save.png"), "保存");
     mainToolBar->addSeparator();
     mainToolBar->addAction(QIcon(":/icons/run.png"), "处理");
@@ -67,38 +75,34 @@ void MainWindow::createDockWidgets()
     // 文件列表窗口
     dockFiles = new QDockWidget(tr("文件列表"), this);
     dockFiles->setObjectName("filesDock");
-    QListWidget *filesList = new QListWidget();
-    filesList->addItems({"/data/pointcloud1.pcd", "/data/pointcloud2.pcd", "/data/model1.obj"});
-    dockFiles->setWidget(filesList);
+    filesListWidget = new QListWidget();  // 使用成员变量
+    dockFiles->setWidget(filesListWidget);
     addDockWidget(Qt::LeftDockWidgetArea, dockFiles);
 
-    // 属性显示区（保留在右侧）
+    // 连接双击信号
+    connect(filesListWidget, &QListWidget::itemDoubleClicked, this, &MainWindow::displayImage);
+
+    // 属性显示区
     dockProperties = new QDockWidget(tr("属性"), this);
     dockProperties->setObjectName("propertiesDock");
     QTextEdit *propertiesContent = new QTextEdit();
-    propertiesContent->setText("点云属性:\n- 点数: 102400\n- 分辨率: 0.01m\n- 范围: 10x10x5m");
+    propertiesContent->setText("点云属性:");
     dockProperties->setWidget(propertiesContent);
     addDockWidget(Qt::RightDockWidgetArea, dockProperties);
 
-    // 操作按钮区域 - 现在放在底部
+    // 操作按钮区域 - 放在底部
     dockActions = new QDockWidget(tr("操作面板"), this);
     dockActions->setObjectName("actionsDock");
     QWidget *actionsPanel = new QWidget();
-
-    // 改为水平布局更适合底部面板
     QHBoxLayout *actionsLayout = new QHBoxLayout(actionsPanel);
 
-    // 原有的操作按钮
-    QPushButton *btnProcess = new QPushButton("处理点云");
-    QPushButton *btnSegment = new QPushButton("分割");
-    QPushButton *btnFilter = new QPushButton("滤波");
-    QPushButton *btnExport = new QPushButton("导出结果");
-
-    // 新增的颜色控制按钮
+    QPushButton *btnProcess = new QPushButton("按钮1");
+    QPushButton *btnSegment = new QPushButton("按钮2");
+    QPushButton *btnFilter = new QPushButton("按钮3");
+    QPushButton *btnExport = new QPushButton("按钮4");
     QPushButton *colorBtn = new QPushButton("红色，变！", this);
     QPushButton *restoreBtn = new QPushButton("恢复默认", this);
 
-    // 添加所有按钮（水平排列）
     actionsLayout->addWidget(btnProcess);
     actionsLayout->addWidget(btnSegment);
     actionsLayout->addWidget(btnFilter);
@@ -112,7 +116,6 @@ void MainWindow::createDockWidgets()
     dockActions->setWidget(actionsPanel);
     addDockWidget(Qt::BottomDockWidgetArea, dockActions);
 
-    // 连接颜色按钮信号
     connect(colorBtn, &QPushButton::clicked, [] {
         Interfaces::instance()->pclChangeColor();
     });
@@ -126,25 +129,31 @@ void MainWindow::createDockWidgets()
 
     // 调整停靠窗口大小
     resizeDocks({dockElements}, {200}, Qt::Horizontal);
-    resizeDocks({dockActions}, {100}, Qt::Vertical); // 底部面板高度设为100
+    resizeDocks({dockActions}, {100}, Qt::Vertical);
 }
 
 void MainWindow::createCentralWidget()
 {
     centralSplitter = new QSplitter(Qt::Horizontal, this);
-
-    // 使用PCLWidget替换原来的VTK部件
     pclWidget = new PCLWidget();
     pclWidget->setMinimumSize(400, 400);
 
-    // 右侧图像区域
-    imageWidget = new QTextEdit();
-    imageWidget->setText("图像显示区域\n(实际使用PCL可视化组件)");
-    imageWidget->setStyleSheet("background-color: #333; color: #EEE;");
-    imageWidget->setReadOnly(true);
+    // 创建图像显示区域（使用滚动区域）
+    imageScrollArea = new QScrollArea();
+    imageLabel = new QLabel();
+    imageLabel->setBackgroundRole(QPalette::Base);
+    imageLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
+    imageLabel->setScaledContents(true);
+    imageLabel->setAlignment(Qt::AlignCenter);
+    imageLabel->setText("图像显示区域");
+    imageLabel->setStyleSheet("background-color: #333; color: #EEE;");
+
+    imageScrollArea->setBackgroundRole(QPalette::Dark);
+    imageScrollArea->setWidget(imageLabel);
+    imageScrollArea->setWidgetResizable(true);
 
     centralSplitter->addWidget(pclWidget);
-    centralSplitter->addWidget(imageWidget);
+    centralSplitter->addWidget(imageScrollArea);
     centralSplitter->setStretchFactor(0, 2);
     centralSplitter->setStretchFactor(1, 1);
 
@@ -205,4 +214,65 @@ void MainWindow::closeEvent(QCloseEvent *event)
 {
     saveLayout();
     event->accept();
+}
+
+// 打开图片文件
+void MainWindow::openImageFiles()
+{
+    QStringList fileNames = QFileDialog::getOpenFileNames(
+        this,
+        tr("打开图片"),
+        QDir::homePath(),
+        tr("图片文件 (*.png *.jpg *.jpeg *.bmp *.tif)")
+        );
+
+    if (fileNames.isEmpty()) return;
+
+    foreach (const QString &fileName, fileNames) {
+        // 只添加不在列表中的文件
+        QList<QListWidgetItem*> items = filesListWidget->findItems(fileName, Qt::MatchExactly);
+        if (items.isEmpty()) {
+            QFileInfo fileInfo(fileName);
+            QListWidgetItem *item = new QListWidgetItem(fileInfo.fileName());
+            item->setData(Qt::UserRole, fileName); // 存储完整路径
+            filesListWidget->addItem(item);
+        }
+    }
+}
+
+// 显示图片
+void MainWindow::displayImage(QListWidgetItem *item)
+{
+    QString filePath = item->data(Qt::UserRole).toString();
+    if (filePath.isEmpty()) {
+        QMessageBox::warning(this, "错误", "无法获取文件路径");
+        return;
+    }
+
+    // 使用OpenCV加载图像
+    cv::Mat image = cv::imread(filePath.toStdString());
+    if (image.empty()) {
+        QMessageBox::critical(this, "错误", "无法加载图像: " + filePath);
+        return;
+    }
+
+    // 转换颜色空间 BGR -> RGB
+    cv::cvtColor(image, image, cv::COLOR_BGR2RGB);
+
+    // 创建QImage
+    QImage qimg(image.data,
+                image.cols,
+                image.rows,
+                image.step,
+                QImage::Format_RGB888);
+
+    // 显示图像
+    imageLabel->setPixmap(QPixmap::fromImage(qimg));
+    imageLabel->adjustSize();
+
+    // 更新窗口标题显示图像信息
+    setWindowTitle(QString("图像显示: %1 | 尺寸: %2x%3")
+                       .arg(item->text())
+                       .arg(image.cols)
+                       .arg(image.rows));
 }

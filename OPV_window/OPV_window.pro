@@ -26,3 +26,20 @@ FORMS += \
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
+
+
+win32 {
+    CONFIG(release, debug|release) {
+        # Release 模式
+        LIBS += -L$$PWD/../../../../openCV/opencv/build/x64/vc16/lib \
+                -lopencv_world4100      # 改为你的真实 Release 库名
+    } else:CONFIG(debug, debug|release) {
+        # Debug 模式
+        LIBS += -L$$PWD/../../../../openCV/opencv/build/x64/vc16/lib \
+                -lopencv_world4100     # 改为你的真实 Debug 库名（带 'd' 后缀）
+    }
+}
+
+
+INCLUDEPATH += $$PWD/../../../../openCV/opencv/build/include
+DEPENDPATH += $$PWD/../../../../openCV/opencv/build/include
